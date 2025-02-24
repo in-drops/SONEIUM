@@ -10,7 +10,7 @@ from models.amount import Amount
 from snippets.activities.relay import get_request_id, relay
 from utils.inputs import input_pause, input_cycle_amount, input_cycle_pause
 from utils.logging import init_logger
-from utils.utils import (random_sleep, get_accounts, select_profiles)
+from utils.utils import (random_sleep, get_accounts, select_profiles, get_user_agent)
 from snippets import activities
 
 def main():
@@ -39,6 +39,7 @@ def worker(account: Account) -> None:
 
 def activity(bot: Bot):
 
+    get_user_agent()
     excel_report = Excel(bot.account, file='SoneiumActivity.xlsx')
     excel_report.set_cell('Address', f'{bot.account.address}')
     excel_report.set_date('Date')
