@@ -99,7 +99,7 @@ class Chains:
 
     SONEIUM = Chain(
         name='soneium',
-        rpc='https://soneium.drpc.org',
+        rpc='https://rpc.soneium.org',
         chain_id=1868,
         metamask_name='Soneium',
     )
