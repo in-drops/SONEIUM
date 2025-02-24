@@ -15,13 +15,22 @@ from models.amount import Amount
 from models.chain import Chain
 from models.contract_raw import ContractRaw
 from models.token import Token, TokenTypes
-from utils.utils import to_checksum, random_sleep, get_multiplayer, prepare_proxy_requests, get_user_agent
+from utils.utils import to_checksum, random_sleep, get_multiplayer, prepare_proxy_requests, get_user_agent, \
+    get_response
 
 
 class Onchain:
     def __init__(self, account: Account, chain: Chain):
         self.account = account
         self.chain = chain
+
+        self.w3 = self._prepare_w3(chain)
+        if self.account.private_key:
+            if not self.account.address:
+                self.account.address = self.w3.eth.account.from_key(self.account.private_key).address
+
+
+    def _prepare_w3(self, chain: Chain) -> Web3:
         request_kwargs = {
             'headers': {
                 'User-Agent': get_user_agent(),
@@ -31,11 +40,13 @@ class Onchain:
         }
         if config.is_web3_proxy:
             request_kwargs['proxies'] = prepare_proxy_requests(self.account.proxy)
-
         self.w3 = Web3(Web3.HTTPProvider(chain.rpc, request_kwargs=request_kwargs))
-        if self.account.private_key:
-            if not self.account.address:
-                self.account.address = self.w3.eth.account.from_key(self.account.private_key).address
+        return self.w3
+
+    def change_chain(self, chain: Chain):
+
+        self.chain = chain
+        self.w3 = self._prepare_w3(chain)
 
     def _get_token_params(self, token_address: str | ChecksumAddress) -> tuple[str, int]:
 
@@ -54,9 +65,10 @@ class Onchain:
 
         return self.w3.eth.contract(contract_raw.address, abi=contract_raw.abi)
 
-    def _estimate_gas(self, tx: dict) -> None:
+    def _estimate_gas(self, tx_params: dict) -> dict:
 
-        tx['gas'] = int(self.w3.eth.estimate_gas(tx) * get_multiplayer())
+        tx_params['gas'] = int(self.w3.eth.estimate_gas(tx_params) * get_multiplayer())
+        return tx_params
 
     def _get_fee(self, tx_params: dict[str, str | int] | None = None) -> dict[str, str | int]:
 
@@ -70,7 +82,7 @@ class Onchain:
             self.chain.is_eip1559 = any(fee_history.get('baseFeePerGas', [0]))
 
         if self.chain.is_eip1559 is False:
-            tx_params['gasPrice'] = int(self.w3.eth.gas_price * get_multiplayer())
+            tx_params['gasPrice'] = self._multiply(self.w3.eth.gas_price)
             return tx_params
 
         fee_history = fee_history or self.w3.eth.fee_history(20, 'latest', [40])
@@ -152,6 +164,7 @@ class Onchain:
 
         if token is None:
             token = Tokens.NATIVE_TOKEN
+            token.chain = self.chain
 
         # если не указан адрес, то берем адрес аккаунта
         if not address:
@@ -159,6 +172,10 @@ class Onchain:
 
         # приводим адрес к формату checksum
         address = to_checksum(address)
+
+        if token.chain != self.chain:
+            logger.error(f'Токен на другой сети {token.chain.name} проверяется в {self.chain.name}!')
+            raise ValueError('Токен на другой сети!')
 
         # если передан адрес контракта, то получаем параметры токена и создаем объект Token
         if isinstance(token, str):
@@ -186,7 +203,7 @@ class Onchain:
         gues_gas_price = tx_params.get('maxFeePerGas', tx_params.get('gasPrice'))
         fee_spend = self._multiply(l1_fee.wei + gues_gas * gues_gas_price, 1.1, 1.2)
         balance = self.get_balance()
-        if balance.wei - fee_spend - amount.wei > 0:
+        if balance.wei - fee_spend - amount.wei >= 0:
             return
 
         message = f'баланс {self.chain.native_token}: {balance}, сумма: {amount} to {tx_params["to"]}'
@@ -259,7 +276,14 @@ class Onchain:
         logger.info(f'Транзакция отправлена! {message}')
         return tx_hash
 
-    def _get_allowance(self, token: Token, spender: str | ChecksumAddress | ContractRaw) -> Amount:
+    def _get_allowance(self, token: Token | str, spender: str | ChecksumAddress | ContractRaw) -> Amount:
+
+        if token is None or token.type_token == TokenTypes.NATIVE:
+            return Amount(0, wei=True)
+
+        if isinstance(token, str):
+            symbol, decimals = self._get_token_params(token)
+            token = Token(symbol, token, self.chain, decimals)
 
         if isinstance(spender, ContractRaw):
             spender = spender.address
@@ -271,24 +295,33 @@ class Onchain:
         allowance = contract.functions.allowance(self.account.address, spender).call()
         return Amount(allowance, decimals=token.decimals, wei=True)
 
-    def approve(self, token: Optional[Token], amount: Amount | int | float,
+    def approve(self, token: Optional[Token, str], amount: Amount | int | float,
                 spender: str | ChecksumAddress | ContractRaw) -> None:
-
 
         if token is None or token.type_token == TokenTypes.NATIVE:
             return
 
-        if self._get_allowance(token, spender).wei >= amount.wei:
-            return
+        if isinstance(token, str):
+            symbol, decimals = self._get_token_params(token)
+            token = Token(symbol, token, self.chain, decimals)
 
         if isinstance(amount, (int, float)):
             amount = Amount(amount, decimals=token.decimals)
+
+        allowed = self._get_allowance(token, spender)
+
+        if amount.wei == 0 and allowed.wei == 0:
+            return
+
+        if amount.wei != 0 and allowed.wei >= amount.wei:
+            return
 
         if isinstance(spender, ContractRaw):
             spender = spender.address
 
         contract = self._get_contract(token)
         tx_params = self._prepare_tx()
+        tx_params = self._get_fee(tx_params)
 
         tx_params = contract.functions.approve(spender, amount.wei).build_transaction(tx_params)
         self._estimate_gas(tx_params)
@@ -329,6 +362,58 @@ class Onchain:
         if any(base_fee):
             return True
         return False
+
+
+    def remove_approves(self):
+
+
+        if not config.ETHERSCAN_API_KEY:
+            logger.error('[onchain.remove_approves] Не указан ключ для etherscan')
+            return
+
+        logs = self._get_approval_logs()
+        if not logs:
+            logger.info('[onchain.remove_approves] Нет логов Approval')
+            return
+
+        approved = set()
+
+        tokens_cache = {}
+
+        for log in logs:
+            token_address = log.get('address')
+            spender_address = '0x' + log.get('topics')[2][26:]  # адрес spender
+            approved.add((token_address, spender_address))
+
+        for token_address, spender_address in approved:
+            # получаем параметры токена
+            token = tokens_cache.get(token_address)
+            # кешируем токен для дальнейшего использования
+            if not token:
+                symbol, decimals = self._get_token_params(token_address)
+                token = Token(symbol, token_address, self.chain, decimals)
+                tokens_cache[token_address] = token
+
+            self.approve(token, 0, spender_address)
+
+
+
+    def _get_approval_logs(self):
+
+        url = f'https://api.etherscan.io/v2/api'
+        params = {
+            'chainid': self.chain.chain_id,
+            'module': 'logs',
+            'action': 'getLogs',
+            'fromBlock': 0,
+            'toBlock': 'latest',
+            'topic0': '0x' + self.w3.keccak(text='Approval(address,address,uint256)').hex(),
+            'topic0_1': 'and',
+            'topic1': '0x' + self.account.address[2:].rjust(64, '0'),
+            'apikey': config.ETHERSCAN_API_KEY,
+        }
+        response = get_response(url, params)
+        return response.get('result', [])
 
     def get_tx_count(self, address: str | ChecksumAddress):
 

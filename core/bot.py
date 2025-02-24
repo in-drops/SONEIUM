@@ -18,7 +18,7 @@ class Bot:
         self.excel = Excel(account)
         self.metamask = Metamask(self.ads, account, self.excel)
         self.exchanges = Exchanges(account)
-        self.onchain = Onchain(account, chain)
+        self.onchain = Onchain(account, self.chain)
 
     def __enter__(self):
         return self

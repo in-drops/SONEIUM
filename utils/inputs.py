@@ -21,6 +21,30 @@ def input_pause() -> float:
         except ValueError:
             print("Некорректный ввод! Попробуйте снова.")
 
+def input_cycle_amount() -> int:
+
+    while True:
+        amount_input = input('Введите количество циклов (например: 1, 5, 10) и нажмите ENTER: ')
+        amount_cleaned = re.sub(r'\D', '', amount_input)
+        try:
+            cycle_amount = int(amount_cleaned)
+            print(f"Пауза между циклами: {int(amount_input)} сек.!\n")
+            return cycle_amount
+        except ValueError:
+            print("Некорректный ввод! Попробуйте снова.")
+
+def input_cycle_pause() -> float:
+
+    while True:
+        pause_input = input('Введите паузу между циклами в секундах (например: 300, 60, 180) и нажмите ENTER: ')
+        pause_cleaned = re.sub(r'\D', '', pause_input)
+        try:
+            pause = float(pause_cleaned)
+            print(f"Пауза между циклами: {int(pause_input)} сек.!\n")
+            return pause
+        except ValueError:
+            print("Некорректный ввод! Попробуйте снова.")
+
 def input_okx_chain() -> Chain:
 
     chains = Chains.get_chains_list()
