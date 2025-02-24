@@ -52,7 +52,7 @@ def activity(bot: Bot):
             return
         relay(bot, to_chain=to_chain, amount=amount)
         excel_report.increase_counter(f'RELAY')
-        random_sleep(5, 10)
+        random_sleep(10, 30)
 
     logger.success('Активность на RELAY прошла успешно! Данные записаны в таблицу SoneiumActivity.xlsx')
 
