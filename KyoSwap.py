@@ -46,7 +46,6 @@ def activity(bot: Bot):
     bot.metamask.select_chain(Chains.SONEIUM)
     bot.ads.open_url('https://app.kyo.finance/swap')
     random_sleep(2, 3)
-    bot.ads.page.locator('div.mantine-1gj27ri').click()
 
     connect_button = bot.ads.page.get_by_role('button', name='Connect Wallet')
     if connect_button.count():
