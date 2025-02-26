@@ -82,7 +82,7 @@ def activity(bot: Bot, from_chain, amount_input):
     from_chain_balance = bot.onchain.get_balance().ether
     to_chain = Chains.SONEIUM
     to_chain_balance_before = Onchain(bot.account, to_chain).get_balance().ether
-    deposit_amount = amount_input - to_chain_balance_before
+    deposit_amount = Amount(amount_input - to_chain_balance_before)
 
     if to_chain_balance_before > amount_input:
         logger.warning(
