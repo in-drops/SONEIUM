@@ -90,7 +90,7 @@ def activity(bot: Bot, from_chain, amount_input):
         return
 
     if deposit_amount > from_chain_balance:
-        logger.error(f'Баланс в сети {from_chain.name.upper()} недостаточный для перевода: {from_chain_balance:.5f} {from_chain_balance.native_token}!')
+        logger.error(f'Баланс в сети {from_chain.name.upper()} недостаточный для перевода: {from_chain_balance:.5f} {from_chain.native_token}!')
         return
 
     relay(bot, to_chain=to_chain, amount=deposit_amount)
