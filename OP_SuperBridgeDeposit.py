@@ -16,7 +16,6 @@ def main():
     if not config.is_browser_run:
         config.is_browser_run = True
     init_logger()
-
     accounts = get_accounts()
     accounts_for_work = select_profiles(accounts)
     amount_input = input_deposit_amount()

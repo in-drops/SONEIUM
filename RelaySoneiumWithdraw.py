@@ -21,6 +21,7 @@ def main():
     pause = input_pause()
     cycle_amount = input_cycle_amount()
     cycle_pause = input_cycle_pause()
+
     for i in range(cycle_amount):
         random.shuffle(accounts_for_work)
         for account in accounts_for_work:
