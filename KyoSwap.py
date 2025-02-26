@@ -21,8 +21,8 @@ def main():
     pause = input_pause()
 
     for i in range(config.cycle):
+        random.shuffle(accounts_for_work)
         for account in accounts_for_work:
-            random.shuffle(accounts_for_work)
             worker(account)
             random_sleep(pause)
 
