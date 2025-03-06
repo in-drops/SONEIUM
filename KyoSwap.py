@@ -49,6 +49,7 @@ def activity(bot: Bot):
     connect_button = bot.ads.page.get_by_role('button', name='Connect Wallet')
     if connect_button.count():
         bot.ads.page.get_by_role('button', name='Connect Wallet').first.click()
+        bot.ads.page.get_by_role('alertdialog').locator('wui-icon[name="checkmarkBold"]').check()
         bot.metamask.connect(bot.ads.page.get_by_text('MetaMask'))
         random_sleep(2, 3)
     random_sleep(2, 3)
